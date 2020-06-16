@@ -1,15 +1,20 @@
 #include "graphics.h"
 #include "SPI.h"
+#include "Fonts/fonts.h"
 
 #define ESP32
 
 /*
  General graphics lib to be inherited
 */
+
 graphics::graphics(short maxX, short maxY)
 {	
 	this->maxX = maxX;
 	this->maxY = maxY;
+	// Load default fonts
+	fontTypeLoaded = ORBITRON_LIGHT24;
+	currentFonts = &orbitronLight24Font;
 }
 
 void graphics::drawRect(short x1, short y1, short x2, short y2, bool fill)
@@ -135,364 +140,81 @@ void graphics::drawCircle(short x, short y, int radius, bool fill)
 	}
 }
 
-void graphics::drawChar(unsigned char c, short x, short y, float size, float factor)
+void graphics::drawTriangle(short x0, short y0, short x1, short y1, short x2, short y2, bool fill)
 {
-	float s = size, _factor;
-	_factor = s * factor;
-	switch (c)
+	if (!fill)
 	{
-	case 'a':
-	case 'A':
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)(_factor / 4), y);                /*  line no I    */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /*  line no II   */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)s);          /*  line no III  */
-		drawLine(x + (unsigned int)(_factor / 8), y + (unsigned int)(s / 2), x + (unsigned int)(7 * _factor / 8), y + (unsigned int)(s / 2));  /*  line no IV   */
-		break;
-
-	case 'b':
-	case 'B':
-		drawLine(x, y, x, y + (unsigned int)s);                      /*  line no I    */
-		drawLine(x, y, x + (unsigned int)(3 * _factor / 4), y);                /*  line no II   */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*  line no III  */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(s / 4));    /*  line no IV   */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));        /*  line no V    */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));  /*  line no VI   */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));    /*  line no VII  */
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);            /*  line no VIII */
-		break;
-
-	case 'c':
-	case 'C':
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)_factor, y);              /*  line no I    */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*  line no II   */
-		drawLine(x, y + (unsigned int)(s / 4), x, y + (unsigned int)(3 * s / 4));              /*  line no III  */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)s);          /*  line no IV   */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)s);          /*  line no V    */
-		break;
-
-	case 'd':
-	case 'D':
-		drawLine(x, y, x, y + (unsigned int)s);                      /*  line no I    */
-		drawLine(x, y, x + (unsigned int)(3 * _factor / 4), y);                /*  line no II   */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*  line no III  */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));      /*  line no IV   */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /*  line no V    */
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);
-		break;
-
-	case 'e':
-	case 'E':
-		drawLine(x, y + (unsigned int)(s / 4), x, y + (unsigned int)(3 * s / 4));              /*  line no I    */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*  line no II   */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)_factor, y);              /*  line no III  */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(s / 2));            /*  line no VI   */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)s);          /*  line no V    */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)s);          /*  line no VI   */
-		break;
-
-	case 'f':
-	case 'F':
-		drawLine(x, y, x, y + (unsigned int)s);                      /*  line no I    */
-		drawLine(x, y, x + (unsigned int)(_factor / 2), y);                  /*  line no II   */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2));          /*  line no III  */
-		break;
-
-	case 'g':
-	case 'G':
-		drawLine(x, y + (unsigned int)(s / 4), x, y + (unsigned int)(3 * s / 4));              /*  line no I    */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*  line no II   */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)s);          /*  line no III  */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /*  line no IV   */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);      /*  line no V    */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));    /*  line no VI   */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)_factor, y + (unsigned int)(s / 2));      /*  line no VII  */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 2), x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2));      /*  line no VIII */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*  line no IX   */
-		break;
-
-	case 'h':
-	case 'H':
-		drawLine(x, y, x, y + (unsigned int)s);                      /*  line no I    */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(s / 2));            /*  line no II   */
-		drawLine(x + (unsigned int)_factor, y, x + (unsigned int)_factor, y + (unsigned int)s);              /*  line no III  */
-		break;
-
-	case 'i':
-	case 'I':
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /*  line no I    */
-		drawLine(x + (unsigned int)(_factor / 2), y, x + (unsigned int)(_factor / 2), y + (unsigned int)s);          /*  line no II   */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);      /*  line no III  */
-		break;
-
-	case 'j':
-	case 'J':
-		drawLine(x, y, x + (unsigned int)_factor, y);                    /*  line no I    */
-		drawLine(x + (unsigned int)(_factor / 2), y, x + (unsigned int)(_factor / 2), y + (unsigned int)s);          /*  line no II   */
-		drawLine(x + (unsigned int)(_factor / 2), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);        /*  line no III  */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));          /*  line no IV   */
-		break;
-
-	case 'k':
-	case 'K':
-		drawLine(x, y, x, y + (unsigned int)s);                       /*  line no I    */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)_factor, y);                 /*  line no II   */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)s);               /*  line no III  */
-		break;
-
-	case 'l':
-	case 'L':
-		drawLine(x, y, x, y + (unsigned int)s);                        /*  line no I    */
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)s);                  /*  line no II   */
-		break;
-
-	case 'm':
-	case 'M':
-		drawLine(x, y, x, y + (unsigned int)s);                        /*  line no I    */
-		drawLine(x, y, x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2));                /*  line no II   */
-		drawLine(x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y);            /*  line no III  */
-		drawLine(x + (unsigned int)_factor, y, x + (unsigned int)_factor, y + (unsigned int)s);                /*  line no IV   */
-		break;
-
-	case 'n':
-	case 'N':
-		drawLine(x, y, x, y + (unsigned int)s);                        /*  line no I    */
-		drawLine(x, y, x + (unsigned int)_factor, y + (unsigned int)s);                    /*  line no II   */
-		drawLine(x + (unsigned int)_factor, y, x + (unsigned int)_factor, y + (unsigned int)s);                /*  line no III  */
-		break;
-
-	case 'o':
-	case 'O':
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /* line no I     */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /* line no II    */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /* line no III   */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));      /* line no IV    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /* line no V     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);      /* line no VI    */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));          /* line no VII   */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x, y + (unsigned int)(s / 4));              /* line no VIII  */
-		break;
-
-	case 'p':
-	case 'P':
-		drawLine(x, y, x, y + (unsigned int)s);                      /*  line no I    */
-		drawLine(x, y, x + (unsigned int)(3 * _factor / 4), y);                /*  line no II   */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));        /*  line no III  */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*  line no IV   */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));    /*  line no V    */
-		break;
-
-	case 'q':
-	case 'Q':
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /* line no I     */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /* line no II    */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /* line no III   */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));      /* line no IV    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /* line no V     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);      /* line no VI    */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));          /* line no VII   */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x, y + (unsigned int)(s / 4));              /* line no VIII  */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(3 * s / 4), x + (unsigned int)_factor, y + (unsigned int)s);    /* line no IX    */
-		break;
-
-	case 'r':
-	case 'R':
-		drawLine(x, y, x, y + (unsigned int)s);                      /*  line no I     */
-		drawLine(x, y, x + (unsigned int)(3 * _factor / 4), y);                /*  line no II    */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));        /*  line no III   */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*  line no IV    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));    /*  line no VI    */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)s);              /*  line no VII   */
-		break;
-
-	case 's':
-	case 'S':
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*  line no I     */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /*  line no II    */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*  line no III   */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2));          /*  line no IV    */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));  /*  line no V     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));  /*  line no VI    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /*  line no VII   */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);      /*  line no VIII  */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));          /*  line no IX    */
-		break;
-
-	case 't':
-	case 'T':
-		drawLine(x, y, x + (unsigned int)_factor, y);                  /*   line no I     */
-		drawLine(x + (unsigned int)(_factor / 2), y, x + (unsigned int)(_factor / 2), y + (unsigned int)s);        /*   line no II    */
-		break;
-
-	case 'u':
-	case 'U':
-		drawLine(x, y, x, y + (unsigned int)(3 * s / 4));                /* line no I       */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)s);        /* line no II      */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /* line no III     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));  /* line no IV      */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)_factor, y);        /* line no V       */
-		break;
-
-	case 'v':
-	case 'V':
-		drawLine(x, y, x + (unsigned int)(_factor / 2), y + (unsigned int)s);             /*  line no I      */
-		drawLine(x + (unsigned int)(_factor / 2), y + (unsigned int)s, x + (unsigned int)_factor, y);         /*  line no II     */
-		break;
-
-	case 'w':
-	case 'W':
-		drawLine(x, y, x, y + (unsigned int)s);                    /*  line no I      */
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2));          /*  line no II     */
-		drawLine(x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)s);      /*  line no III    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)s, x + (unsigned int)_factor, y);            /*  line no IV     */
-		break;
-
-	case 'x':
-	case 'X':
-		drawLine(x, y, x + (unsigned int)_factor, y + (unsigned int)s);
-		drawLine(x + (unsigned int)_factor, y, x, y + (unsigned int)s);
-		break;
-
-	case 'y':
-	case 'Y':
-		drawLine(x, y, x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2));            /*  line no I      */
-		drawLine(x + (unsigned int)_factor, y, x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2));        /*  line no II     */
-		drawLine(x + (unsigned int)(_factor / 2), y + (unsigned int)(s / 2), x + (unsigned int)(_factor / 2), y + (unsigned int)s);    /*  line no III    */
-		break;
-
-	case 'z':
-	case 'Z':
-		drawLine(x, y, x + (unsigned int)_factor, y);                    /*line no I       */
-		drawLine(x + (unsigned int)_factor, y, x, y + (unsigned int)s);                  /*line no II      */
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)s);                /*line no III     */
-		break;
-
-	case '0':
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);            /* line no I       */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);        /* line no II      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));      /* line no III     */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));    /* line no IV      */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);  /* line no V       */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);    /* line no VI      */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));        /* line no VII     */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x, y + (unsigned int)(s / 4));            /* line no VIII    */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);      /* line no IX      */
-		break;
-
-	case '1':
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 2), y);      /* line no I      */
-		drawLine(x + (unsigned int)(_factor / 2), y, x + (unsigned int)(_factor / 2), y + (unsigned int)s);        /* line no II     */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /* line no III    */
-		break;
-
-	case '2':
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);             /* line no I      */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);         /* line no II     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));       /* line no III    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)_factor, y + (unsigned int)(s / 2));       /* line no IV     */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 2), x, y + (unsigned int)s);             /* line no V      */
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)s);               /* line no IV     */
-		break;
-
-	case '3':
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);             /* line no I      */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);         /* line no II     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));       /* line no III    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));   /* line no IV     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4)); /* line no V      */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);   /* line no VI     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);     /* line no VII    */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));         /* line no VIII   */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2)); /* line no IX     */
-		break;
-
-	case '4':
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x, y + (unsigned int)(3 * s / 4));        /* line no I      */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y);          /*line no II      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);      /*line no III     */
-		break;
-
-	case '5':
-		drawLine(x + (unsigned int)_factor, y, x, y);                    /*line no I       */
-		drawLine(x, y, x, y + (unsigned int)(s / 2));                    /*line no II      */
-		drawLine(x, y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));        /*line no III     */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));  /*line no IV      */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /*line no V       */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x, y + (unsigned int)s);            /* line no VI     */
-		break;
-	case '6':
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2));        /*line no I       */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));  /*line no II      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));  /*line no III     */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /*line no IV      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);      /*line no V       */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));          /*line no VI      */
-		drawLine(x, y + (unsigned int)(3 * s / 4), x, y + (unsigned int)(s / 4));              /*line no VII     */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*line no VIII    */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /*line no IX      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*line no X       */
-		break;
-	case '7':
-		drawLine(x, y + (unsigned int)(s / 4), x, y);                    /*line no I       */
-		drawLine(x, y, x + (unsigned int)_factor, y);                    /*line no II      */
-		drawLine(x + (unsigned int)_factor, y, x, y + (unsigned int)s);                  /*line no III     */
-		break;
-	case '8':
-		drawLine(x, y + (unsigned int)(3 * s / 4), x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2));        /*line no I       */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));  /*line no II      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));  /*line no III     */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /*line no IV      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x + (unsigned int)(_factor / 4), y + (unsigned int)s);      /*line no V       */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)s, x, y + (unsigned int)(3 * s / 4));          /*line no VI      */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2), x, y + (unsigned int)(s / 4));          /*line no VII     */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*line no VIII    */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /*line no IX      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*line no X       */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));    /*line no XI      */
-		break;
-	case '9':
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2));    /*line no I       */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)(s / 2), x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2));  /*line no II      */
-		drawLine(x + (unsigned int)(_factor / 4), y + (unsigned int)(s / 2), x, y + (unsigned int)(s / 4));          /*line no III     */
-		drawLine(x, y + (unsigned int)(s / 4), x + (unsigned int)(_factor / 4), y);              /*line no IV      */
-		drawLine(x + (unsigned int)(_factor / 4), y, x + (unsigned int)(3 * _factor / 4), y);          /* line no V      */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y, x + (unsigned int)_factor, y + (unsigned int)(s / 4));        /*line no  VI     */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(s / 4), x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4));      /*line no  VII    */
-		drawLine(x + (unsigned int)_factor, y + (unsigned int)(3 * s / 4), x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s);    /*line no VIII    */
-		drawLine(x + (unsigned int)(3 * _factor / 4), y + (unsigned int)s, x, y + (unsigned int)s);            /*line no IX      */
-		break;
-	case '.':
-		drawLine(x + (unsigned int)(3 * _factor / 8), y + (unsigned int)(7 * s / 8), x + (unsigned int)(5 * _factor / 8), y + (unsigned int)(7 * s / 8));
-		drawLine(x + (unsigned int)(5 * _factor / 8), y + (unsigned int)(7 * s / 8), x + (unsigned int)(5 * _factor / 8), y + (unsigned int)s);
-		drawLine(x + (unsigned int)(5 * _factor / 8), y + (unsigned int)s, x + (unsigned int)(3 * _factor / 8), y + (unsigned int)s);
-		drawLine(x + (unsigned int)(3 * _factor / 8), y + (unsigned int)s, x + (unsigned int)(3 * _factor / 8), y + (unsigned int)(7 * s / 8));
-		break;
-	default:
-		drawLine(x, y, x + (unsigned int)_factor, y);
-		drawLine(x, y + (unsigned int)s, x + (unsigned int)_factor, y + (unsigned int)s);
-		drawLine(x, y, x, y + (unsigned int)s);
-		drawLine(x + (unsigned int)_factor, y, x + (unsigned int)_factor, y + (unsigned int)s);
+		drawLine(x0, y0, x1, y1);
+		drawLine(x1, y1, x2, y2);
+		drawLine(x2, y2, x0, y0);
 	}
-
-}
-
-void graphics::drawString(char * string, short x, short y, float size, float factor)
-{
-	unsigned char   c;
-	float           s = size, f = factor;
-	int i = 0, x1 = x;
-
-	while ((c = string[i]) != '\0')
+	else
 	{
-		if (c != ' ')
-		{
-			drawChar(c, x1, y, s, f);
-			x1 += (s*f + s * f / 4);
+		short a, b, y, last;
+
+		// Sort coordinates by Y order (y2 >= y1 >= y0)
+		if (y0 > y1) {
+			swap(&y0, &y1);
+			swap(&x0, &x1);
 		}
+		if (y1 > y2) {
+			swap(&y2, &y1);
+			swap(&x2, &x1);
+		}
+		if (y0 > y1) {
+			swap(&y0, &y1);
+			swap(&x0, &x1);
+		}
+
+		if (y0 == y2) { // Handle awkward all-on-same-line case as its own thing
+			a = b = x0;
+			if (x1 < a)
+				a = x1;
+			else if (x1 > b)
+				b = x1;
+			if (x2 < a)
+				a = x2;
+			else if (x2 > b)
+				b = x2;
+			drawHLine(a, y0, b - a + 1);
+			return;
+		}
+
+		short	dx01 = x1 - x0, dy01 = y1 - y0, dx02 = x2 - x0, dy02 = y2 - y0, dx12 = x2 - x1, dy12 = y2 - y1;
+		int		sa = 0, sb = 0;
+
+		if (y1 == y2)
+			last = y1; // Include y1 scanline
 		else
+			last = y1 - 1; // Skip it
+
+		for (y = y0; y <= last; y++) 
 		{
-			x1 += ((s*f + s * f / 4) / 2);
+			a = x0 + sa / dy01;
+			b = x0 + sb / dy02;
+			sa += dx01;
+			sb += dx02;
+
+			if (a > b)
+				swap(&a, &b);
+			drawHLine(a, y, b - a + 1);
 		}
-		i++;
+
+		// For lower part of triangle, find scanline crossings for segments
+		// 0-2 and 1-2.  This loop is skipped if y1=y2.
+		sa = (int)dx12 * (y - y1);
+		sb = (int)dx02 * (y - y0);
+		for (; y <= y2; y++) 
+		{
+			a = x1 + sa / dy12;
+			b = x0 + sb / dy02;
+			sa += dx12;
+			sb += dx02;
+
+			if (a > b)
+				swap(&a, &b);
+			drawHLine(a, y, b - a + 1);
+		}
 	}
 }
 
@@ -508,14 +230,14 @@ void graphics::drawLine(short x1, short y1, short x2, short y2)
 {
 	if (y1 == y2)
 	{
-		if(x1 > x2)
+		if (x1 > x2)
 			drawHLine(x2, y1, abs(x2 - x1));
 		else
 			drawHLine(x1, y1, abs(x2 - x1));
 	}
 	else if (x1 == x2)
 	{
-		if(y1 > y2)
+		if (y1 > y2)
 			drawVLine(x1, y2, abs(y2 - y1));
 		else
 			drawVLine(x1, y1, abs(y2 - y1));
@@ -533,7 +255,7 @@ void graphics::drawLine(short x1, short y1, short x2, short y2)
 			int t = -(dy >> 1);
 			while (true)
 			{
-				drawPixel(col,row);				
+				drawPixel(col, row);
 				if (row == y2)
 					return;
 				row += ystep;
@@ -595,6 +317,106 @@ void graphics::setBackColor(char r, char g, char b)
 	bgColor[1] = g;
 	bgColor[0] = r;
 	_bgColor = ((int)b << 16) | ((int)g << 8) | r;
+}
+
+void graphics::print(char * string, short x, short y)
+{
+	unsigned int strLen = strlen(string);
+	short currentX = x, currentY, h, dataLength,dataIndex = 0,dataOffset, dataCounter = 0, widthCounter = 0;
+	unsigned char currentChar, charWidth, charHeight, data;
+	for (size_t i = 0; i < strLen; i++)
+	{
+		if (string[i] < currentFonts->first || string[i] > currentFonts->last)
+		{
+			currentX += currentFonts->fontsInfoArray[0].xAdvance; // Space
+		}
+		else
+		{
+			currentChar = string[i] - currentFonts->first;
+			
+			charWidth = currentFonts->fontsInfoArray[currentChar].width;
+			charHeight = currentFonts->fontsInfoArray[currentChar].height;
+			currentY = y + currentFonts->fontHight + currentFonts->fontsInfoArray[currentChar].yOffset;
+			dataLength = charWidth * charHeight;
+			dataOffset = currentFonts->fontsInfoArray[currentChar].dataOffset;
+
+			dataIndex = 0;
+			widthCounter = 0;
+			dataCounter = 0;
+			data = currentFonts->fontsData[dataOffset + dataIndex];
+			for (h = 0; h < dataLength; h++)
+			{
+				if (data & 0x80)
+				{
+					drawPixel(currentX + widthCounter + currentFonts->fontsInfoArray[currentChar].xOffset, currentY);
+				}
+				data = data << 1;
+				if (widthCounter == charWidth - 1)
+				{
+					currentY++;
+					widthCounter = 0;
+				}
+				else
+					widthCounter++;
+				if (dataCounter == 7)
+				{
+					dataIndex++;
+					data = currentFonts->fontsData[dataOffset + dataIndex];
+					dataCounter = 0;
+				}
+				else
+					dataCounter++;
+			}
+			currentX += currentFonts->fontsInfoArray[currentChar].xAdvance;
+		}
+	}
+}
+
+void graphics::loadFonts(fontType fontsToLoad)
+{
+	switch (fontsToLoad)
+	{
+	case ORBITRON_LIGHT24:
+		currentFonts = &orbitronLight24Font;
+		break;
+	case ORBITRON_LIGHT32:
+		currentFonts = &orbitronLight32Font;
+		break;
+	case MONO_BOLD18:
+		currentFonts = &monoBold18Font;
+		break;
+	case OBLIQUE18:
+		currentFonts = &oblique18Font;
+		break;
+	case SANS_OBLIQUE56:
+		currentFonts = &sansOblique56Font;
+		break;
+	default:
+		currentFonts = &orbitronLight24Font;
+		break;
+	}
+}
+short graphics::getFontHieght()
+{
+	return currentFonts->fontHight;
+
+}
+short graphics::getPrintWidth(char * string)
+{
+	unsigned int strLen = strlen(string);
+	short w = 0;
+	for (size_t i = 0; i < strLen; i++)
+	{
+		if (string[i] < currentFonts->first || string[i] > currentFonts->last)
+		{
+			w += currentFonts->fontsInfoArray[0].xAdvance; // Space
+		}
+		else
+		{
+			w += currentFonts->fontsInfoArray[string[i] - currentFonts->first].xAdvance;
+		}
+	}
+	return w;
 }
 
 #define ESP_WRITE_REG(REG,DATA) (*((volatile unsigned int *)(((unsigned int)(REG)))) = DATA )

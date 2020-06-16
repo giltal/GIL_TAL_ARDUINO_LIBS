@@ -5,12 +5,16 @@
 #ifndef GRAPHICS_h
 #define GRAPHICS_h
 
+#include "Fonts/fonts.h"
+
 class graphics
 {
 	protected:
 		unsigned char	fgColor[3], bgColor[3];
 		int				_fgColor, _bgColor;
 		short			maxX, maxY;
+		customFont *	currentFonts;
+		fontType		fontTypeLoaded;
 
 		void	swap(short * a, short * b);
 
@@ -30,8 +34,11 @@ class graphics
 		virtual void drawRect(short x1, short y1, short x2, short y2,bool fill = false);
 		void	drawRoundRect(short x1, short y1, short x2, short y2,bool fill = false);
 		void	drawCircle(short x, short y, int radius, bool fill = false);
-		void	drawChar(unsigned char c, short x, short y, float size, float factor = 1.0);
-		void	drawString(char * string, short x, short y, float size, float factor = 1.0);
+		void	drawTriangle(short x0, short y0, short x1, short y1, short x2, short y2, bool fill = false);
+		void	loadFonts(fontType fontsToLoad);
+		short	getFontHieght();
+		short	getPrintWidth(char * string);
+		void	print(char * string, short x, short y);
 		
 		int		getXSize() { return maxX; }
 		int		getYSize() { return maxY; }
