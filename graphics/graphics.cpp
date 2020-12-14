@@ -231,16 +231,16 @@ void graphics::drawLine(short x1, short y1, short x2, short y2)
 	if (y1 == y2)
 	{
 		if (x1 > x2)
-			drawHLine(x2, y1, abs(x2 - x1));
+			drawHLine(x2, y1, abs(x2 - x1) + 1);
 		else
-			drawHLine(x1, y1, abs(x2 - x1));
+			drawHLine(x1, y1, abs(x2 - x1) + 1);
 	}
 	else if (x1 == x2)
 	{
 		if (y1 > y2)
-			drawVLine(x1, y2, abs(y2 - y1));
+			drawVLine(x1, y2, abs(y2 - y1) + 1);
 		else
-			drawVLine(x1, y1, abs(y2 - y1));
+			drawVLine(x1, y1, abs(y2 - y1) + 1);
 	}
 	else
 	{
@@ -303,27 +303,42 @@ void graphics::drawVLine(short x, short y, int l)
 	}
 }
 
-void graphics::setColor(char r, char g, char b)
+void graphics::setColor(unsigned char r, unsigned char g, unsigned char b)
 {
 	fgColor[2] = b;
 	fgColor[1] = g;
 	fgColor[0] = r;
 	_fgColor = ((int)b << 16) | ((int)g << 8) | r;
+	fg565 = (((b >> 3) | ((g << 3) & 0xE0)) << 8) | ((r & 0xF8) | (g >> 5));
 }
 
-void graphics::setBackColor(char r, char g, char b)
+unsigned short graphics::rgbTo565(unsigned char r, unsigned char g, unsigned char b)
+{
+	return (((b >> 3) | ((g << 3) & 0xE0)) << 8) | ((r & 0xF8) | (g >> 5));
+}
+
+void graphics::setBackColor(unsigned char r, unsigned char g, unsigned char b)
 {
 	bgColor[2] = b;
 	bgColor[1] = g;
 	bgColor[0] = r;
 	_bgColor = ((int)b << 16) | ((int)g << 8) | r;
+	bg565 = (((b >> 3) | ((g << 3) & 0xE0)) << 8) | ((r & 0xF8) | (g >> 5));
 }
 
-void graphics::print(char * string, short x, short y)
+void graphics::print(char * string, short x, short y,bool center)
 {
 	unsigned int strLen = strlen(string);
-	short currentX = x, currentY, h, dataLength,dataIndex = 0,dataOffset, dataCounter = 0, widthCounter = 0;
+	short currentX = x, currentY, h, dataLength,dataIndex = 0,dataOffset, dataCounter = 0, widthCounter = 0, tempX;
 	unsigned char currentChar, charWidth, charHeight, data;
+	if (center)
+	{
+		unsigned short strWidth = getPrintWidth(string);
+		if (strWidth < maxX)
+		{
+			currentX = (maxX - strWidth) / 2;
+		}
+	}
 	for (size_t i = 0; i < strLen; i++)
 	{
 		if (string[i] < currentFonts->first || string[i] > currentFonts->last)
@@ -348,7 +363,11 @@ void graphics::print(char * string, short x, short y)
 			{
 				if (data & 0x80)
 				{
-					drawPixel(currentX + widthCounter + currentFonts->fontsInfoArray[currentChar].xOffset, currentY);
+					tempX = currentX + widthCounter + currentFonts->fontsInfoArray[currentChar].xOffset;
+					if (!(tempX >= maxX || tempX < 0 || currentY < 0 || currentY >= maxY))
+					{
+						drawPixel(tempX, currentY);
+					}
 				}
 				data = data << 1;
 				if (widthCounter == charWidth - 1)
@@ -419,11 +438,418 @@ short graphics::getPrintWidth(char * string)
 	return w;
 }
 
-#define ESP_WRITE_REG(REG,DATA) (*((volatile unsigned int *)(((unsigned int)(REG)))) = DATA )
+//////////////////////// ILI9488 9 bit parallel class /////////////////////////////////
 
+// IO 0 is D/C
+// IO 2 is WR/CLK
+#define ILI9488P_WR_CMD(X)\
+		ESP_WRITE_REG(0x3FF4400c, 0x000CF035);\ 
+		ESP_WRITE_REG(0x3FF44008, (0x000C0000 & ((int)(X) << 12)) | (0x0000F000 & ((int)(X) << 10)) | (0x00000030 & ((int)(X) << 4)) | 0x4);\
+		ESP_WRITE_REG(0x3FF44008, 0x1); 
+
+#define ILI9488P_WR_DATA8(X)\
+		ESP_WRITE_REG(0x3FF4400c, 0x000CF034);\ 
+		ESP_WRITE_REG(0x3FF44008, (0x000C0000 & ((int)(X) << 12)) | (0x0000F000 & ((int)(X) << 10)) | (0x00000030 & ((int)(X) << 4)));\
+		ESP_WRITE_REG(0x3FF44008, 0x04); 
+
+#define ILI9488_RESET_IO	32
+
+void ILI9488_9BIT_PARALLEL::init(bool _9bit)
+{
+	pinMode(0, OUTPUT); // D/C
+	pinMode(2, OUTPUT); // WR/CLK
+	// Data 0-7
+	pinMode(4, OUTPUT); // D0
+	pinMode(5, OUTPUT); // 1
+	pinMode(12, OUTPUT);// 2
+	pinMode(13, OUTPUT);// 3
+	pinMode(14, OUTPUT);// 4
+	pinMode(15, OUTPUT);// 5
+	pinMode(18, OUTPUT);// 6
+	pinMode(19, OUTPUT);// 7
+	if (_9bit)
+	{
+		pinMode(25, OUTPUT); // D8
+		_9bitFlag = true;
+	}
+	else
+	{
+		_9bitFlag = false;
+	}
+
+	ILI9488SPI_PRE_INIT();
+	ILI9488SPI_RESET();
+	ILI9488SPI_ASSERT_CS();
+
+	ILI9488P_WR_CMD(0xE0);
+	ILI9488P_WR_DATA8(0x00);
+	ILI9488P_WR_DATA8(0x03);
+	ILI9488P_WR_DATA8(0x09);
+	ILI9488P_WR_DATA8(0x08);
+	ILI9488P_WR_DATA8(0x16);
+	ILI9488P_WR_DATA8(0x0A);
+	ILI9488P_WR_DATA8(0x3F);
+	ILI9488P_WR_DATA8(0x78);
+	ILI9488P_WR_DATA8(0x4C);
+	ILI9488P_WR_DATA8(0x09);
+	ILI9488P_WR_DATA8(0x0A);
+	ILI9488P_WR_DATA8(0x08);
+	ILI9488P_WR_DATA8(0x16);
+	ILI9488P_WR_DATA8(0x1A);
+	ILI9488P_WR_DATA8(0x0F);
+
+	ILI9488P_WR_CMD(0XE1);
+	ILI9488P_WR_DATA8(0x00);
+	ILI9488P_WR_DATA8(0x16);
+	ILI9488P_WR_DATA8(0x19);
+	ILI9488P_WR_DATA8(0x03);
+	ILI9488P_WR_DATA8(0x0F);
+	ILI9488P_WR_DATA8(0x05);
+	ILI9488P_WR_DATA8(0x32);
+	ILI9488P_WR_DATA8(0x45);
+	ILI9488P_WR_DATA8(0x46);
+	ILI9488P_WR_DATA8(0x04);
+	ILI9488P_WR_DATA8(0x0E);
+	ILI9488P_WR_DATA8(0x0D);
+	ILI9488P_WR_DATA8(0x35);
+	ILI9488P_WR_DATA8(0x37);
+	ILI9488P_WR_DATA8(0x0F);
+
+	ILI9488P_WR_CMD(0XC0);     //Power Control 1
+	ILI9488P_WR_DATA8(0x17);    //Vreg1out
+	ILI9488P_WR_DATA8(0x15);    //Verg2out
+
+	ILI9488P_WR_CMD(0xC1);     //Power Control 2
+	ILI9488P_WR_DATA8(0x41);    //VGH,VGL
+
+	ILI9488P_WR_CMD(0xC5);     //Power Control 3
+	ILI9488P_WR_DATA8(0x00);
+	ILI9488P_WR_DATA8(0x12);    //Vcom
+	ILI9488P_WR_DATA8(0x80);
+
+	ILI9488P_WR_CMD(0x36);      //Memory Access
+	//ILI9488P_WR_DATA8(0x4A);
+							 ////76543210
+	ILI9488P_WR_DATA8(0b11101010);
+
+	ILI9488P_WR_CMD(0x3A);      // Interface Pixel Format
+	if (_9bit)
+	{
+		ILI9488P_WR_DATA8(0x66); 	  // 0x66 = 18 bits (3 bytes per pixel), 0x55 = 16 bits
+	}
+	else
+	{
+		ILI9488P_WR_DATA8(0x55); 	  // 0x66 = 18 bits (3 bytes per pixel), 0x55 = 16 bits  
+	}
+	ILI9488P_WR_CMD(0XB0);      // Interface Mode Control
+	ILI9488P_WR_DATA8(0x80);     //SDO NOT USE
+
+	ILI9488P_WR_CMD(0xB1);      //Frame rate
+	ILI9488P_WR_DATA8(0xA0);    //60Hz
+
+	ILI9488P_WR_CMD(0xB4);      //Display Inversion Control
+	ILI9488P_WR_DATA8(0x02);    //2-dot
+
+	ILI9488P_WR_CMD(0XB6);     //Display Function Control  RGB/MCU Interface Control
+
+	ILI9488P_WR_DATA8(0x02);    //MCU
+	ILI9488P_WR_DATA8(0x02);    //Source,Gate scan direction
+
+	ILI9488P_WR_CMD(0XE9);     // Set Image Function
+	ILI9488P_WR_DATA8(0x00);    // Disable 24 bit data
+
+	ILI9488P_WR_CMD(0xF7);      // Adjust Control
+	ILI9488P_WR_DATA8(0xA9);
+	ILI9488P_WR_DATA8(0x51);
+	ILI9488P_WR_DATA8(0x2C);
+	ILI9488P_WR_DATA8(0x82);    // D7 stream, loose
+
+	ILI9488P_WR_CMD(0x11);    //Exit Sleep
+	delay(120);
+	ILI9488P_WR_CMD(0x29);    //Display on
+}
+
+void ILI9488_9BIT_PARALLEL::setXY(short x1, short y1, short x2, short y2)
+{
+	ILI9488P_WR_CMD(0x2a);
+	/*ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((x1 >> 8) << 12) & 0x000ff000) | 0x20);
+	ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((x1) << 12) & 0x000ff000) | 0x20);
+	ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((x2 >> 8) << 12) & 0x000ff000) | 0x20);
+	ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((x2) << 12) & 0x000ff000) | 0x20);*/
+	ILI9488P_WR_DATA8(x1 >> 8);
+	ILI9488P_WR_DATA8(x1);
+	ILI9488P_WR_DATA8(x2 >> 8);
+	ILI9488P_WR_DATA8(x2);
+	ILI9488P_WR_CMD(0x2b);
+	/*ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((y1 >> 8) << 12) & 0x000ff000) | 0x20);
+	ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((y1) << 12) & 0x000ff000) | 0x20);
+	ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((y2 >> 8) << 12) & 0x000ff000) | 0x20);
+	ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+	ESP_WRITE_REG(0x3FF44008, (((y2) << 12) & 0x000ff000) | 0x20);*/
+	ILI9488P_WR_DATA8(y1 >> 8);
+	ILI9488P_WR_DATA8(y1);
+	ILI9488P_WR_DATA8(y2 >> 8);
+	ILI9488P_WR_DATA8(y2);
+	ILI9488P_WR_CMD(0x2b);
+	ILI9488P_WR_CMD(0x2c);
+}
+
+void ILI9488_9BIT_PARALLEL::setXY(short x, short y)
+{
+	static short lastX = 1000, lastY = 1000;
+	if (lastX != x)
+	{
+		ILI9488P_WR_CMD(0x2a);
+		/*ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((x >> 8) << 12) & 0x000ff000) | 0x20);
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((x) << 12) & 0x000ff000) | 0x20);
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((x >> 8) << 12) & 0x000ff000) | 0x20);
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((x) << 12) & 0x000ff000) | 0x20);*/
+		ILI9488P_WR_DATA8(x >> 8);
+		ILI9488P_WR_DATA8(x);
+		ILI9488P_WR_DATA8(x >> 8);
+		ILI9488P_WR_DATA8(x);
+	}
+	if (lastY != y)
+	{
+		ILI9488P_WR_CMD(0x2b);
+		/*
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((y >> 8) << 12) & 0x000ff000) | 0x20);
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((y) << 12) & 0x000ff000) | 0x20);
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((y >> 8) << 12) & 0x000ff000) | 0x20);
+		ESP_WRITE_REG(0x3FF4400c, 0x000FF020);
+		ESP_WRITE_REG(0x3FF44008, (((y) << 12) & 0x000ff000) | 0x20);*/
+		ILI9488P_WR_DATA8(y >> 8);
+		ILI9488P_WR_DATA8(y);
+		ILI9488P_WR_DATA8(y >> 8);
+		ILI9488P_WR_DATA8(y);
+	}
+	ILI9488P_WR_CMD(0x2c);
+	lastX = x;
+	lastY = y;
+}
+
+void ILI9488_9BIT_PARALLEL::drawPixel(short x, short y)
+{
+	setXY(x, y);
+	ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+	ESP_WRITE_REG(0x3FF44008, bCh);
+	ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+	ESP_WRITE_REG(0x3FF44008, bCl);
+}
+
+void ILI9488_9BIT_PARALLEL::fillScr(unsigned char r, unsigned char g, unsigned char b)
+{
+	setXY(0, 0, 479, 319);
+
+	unsigned int bch, bcl;
+	unsigned int i, colorH, colorL;
+
+	if (_9bitFlag)
+	{
+		colorH = GET_RGB666_H(r, g, b);
+		colorL = GET_RGB666_L(r, g, b);
+		bcl = ILI9488P_MAP_9BIT(colorL);
+		bch = ILI9488P_MAP_9BIT(colorH);
+	}
+	else
+	{
+		colorH = GET_RGB565_H(r, g, b);
+		colorL = GET_RGB565_L(r, g, b);
+		bcl = ILI9488P_MAP_8BIT(colorL);
+		bch = ILI9488P_MAP_8BIT(colorH);
+	}
+
+	if (bch == bcl)
+	{
+		ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+		ESP_WRITE_REG(0x3FF44008, bcl);
+
+		for (i = 0; i < 480 * 320 * 2; i++)
+		{
+			ESP_WRITE_REG(0x3FF4400c, 0x04);
+			ESP_WRITE_REG(0x3FF44008, 0x04);
+		}
+	}
+	else
+	{
+		for (i = 0; i < 480 * 320; i++)
+		{
+			ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+			ESP_WRITE_REG(0x3FF44008, bch);
+			ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+			ESP_WRITE_REG(0x3FF44008, bcl);
+		}
+	}
+}
+
+void ILI9488_9BIT_PARALLEL::drawCompressed24bitBitmap(short x, short y, const unsigned int * dataArray)
+{
+	unsigned int	hight, width;
+	unsigned int	buffer;
+	int				index = 0;
+
+	width = dataArray[index];
+	index++;
+
+	buffer = dataArray[index];
+	hight = buffer;
+	index++;
+
+	unsigned int dataArraySize = hight * width, i, j, counter = 0,colorL, colorH;
+	unsigned int bch, bcl;
+	unsigned char copies,r,g,b;
+
+	setXY(x, y, x + width - 1, y + hight - 1);
+	for (i = 2; counter < dataArraySize; i++)
+	{
+		b = (dataArray[index] & 0x00ff0000) >> 16;
+		g = (dataArray[index] & 0x0000ff00) >> 8;
+		r = (dataArray[index] & 0x000000ff);
+		copies = (dataArray[index] >> 24);
+		index++;
+		if (_9bitFlag)
+		{
+			colorL = GET_RGB666_L(r, g, b);
+			bcl = ILI9488P_MAP_9BIT(colorL);
+			colorH = GET_RGB666_H(r, g, b);
+			bch = ILI9488P_MAP_9BIT(colorH);
+		}
+		else
+		{
+			colorH = GET_RGB565_H(r, g, b);
+			colorL = GET_RGB565_L(r, g, b);
+			bcl = ILI9488P_MAP_8BIT(colorL);
+			bch = ILI9488P_MAP_8BIT(colorH);
+		}
+
+		for (size_t j = 0; j < copies; j++)
+		{
+			ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+			ESP_WRITE_REG(0x3FF44008, bch);
+			ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+			ESP_WRITE_REG(0x3FF44008, bcl);
+		}
+		counter += copies;
+	}
+}
+
+void ILI9488_9BIT_PARALLEL::drawCompressedGrayScaleBitmap(short x, short y, const unsigned short * dataArray, bool invert)
+{
+	unsigned int hight = dataArray[0], width = dataArray[1];
+	unsigned int dataArraySize = hight * width, i, j, counter = 0, colorL, colorH;
+	unsigned char copies, c;
+	unsigned int bch, bcl;
+
+	setXY(x, y, x + hight - 1, y + width - 1);
+	for (i = 2 ; counter < dataArraySize; i++)
+	{
+		copies = (dataArray[i] >> 8);
+		if (invert)
+		{
+			c = 255 - dataArray[i];
+		}
+		else
+		{
+			c = dataArray[i];
+		}
+		if (_9bitFlag)
+		{
+			colorL = GET_RGB666_L(c, c, c);
+			bcl = ILI9488P_MAP_9BIT(colorL);
+			colorH = GET_RGB666_H(c, c, c);
+			bch = ILI9488P_MAP_9BIT(colorH);
+		}
+		else
+		{
+			colorH = GET_RGB565_H(c, c, c);
+			colorL = GET_RGB565_L(c, c, c);
+			bcl = ILI9488P_MAP_8BIT(colorL);
+			bch = ILI9488P_MAP_8BIT(colorH);
+		}
+
+		for (size_t j = 0; j < copies; j++)
+		{
+			ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+			ESP_WRITE_REG(0x3FF44008, bch);
+			ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+			ESP_WRITE_REG(0x3FF44008, bcl);
+		}
+		counter += copies;
+	}
+}
+
+void ILI9488_9BIT_PARALLEL::setColor(unsigned char r, unsigned char g, unsigned char b)
+{
+	unsigned int colorL, colorH;
+	if (_9bitFlag)
+	{
+		colorH = GET_RGB666_H(r, g, b);
+		colorL = GET_RGB666_L(r, g, b);
+		bCl = ILI9488P_MAP_9BIT(colorL);
+		bCh = ILI9488P_MAP_9BIT(colorH);
+	}
+	else
+	{
+		colorH = GET_RGB565_H(r, g, b);
+		colorL = GET_RGB565_L(r, g, b);
+		bCl = ILI9488P_MAP_8BIT(colorL);
+		bCh = ILI9488P_MAP_8BIT(colorH);
+	}
+}
+
+void ILI9488_9BIT_PARALLEL::drawHLine(short x, short y, int l)
+{
+	if (l < 0)
+	{
+		l = -l;
+		x -= l;
+	}
+	setXY(x, y, x + l, y);
+	for (size_t i = 0; i < l; i++)
+	{
+		ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+		ESP_WRITE_REG(0x3FF44008, bCh);
+		ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+		ESP_WRITE_REG(0x3FF44008, bCl);
+	}
+}
+
+void ILI9488_9BIT_PARALLEL::drawVLine(short x, short y, int l)
+{
+	if (l < 0)
+	{
+		l = -l;
+		y -= l;
+	}
+	setXY(x, y, x, y + l);
+	for (size_t i = 0; i < l; i++)
+	{
+		ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+		ESP_WRITE_REG(0x3FF44008, bCh);
+		ESP_WRITE_REG(0x3FF4400c, PAR_IOs_MASK);
+		ESP_WRITE_REG(0x3FF44008, bCl);
+	}
+}
+
+
+//////////////////////////// ILI9488 SPI base class ////////////////////////////////////
 void ILI9488SPI_BASE::_init(unsigned char sck, unsigned char miso, unsigned char mosi, unsigned char ss, unsigned int freq, ili9488_mode mode)
 {
-	SPI.begin((char)sck, (char)miso, (char)mosi, (char)ss);
+	SPI.begin((char)sck, (char)-1, (char)mosi, (char)-1);
 	SPI.setBitOrder(MSBFIRST);
 	SPI.setFrequency(freq);
 	SPI.setDataMode(3);
@@ -545,13 +971,22 @@ void ILI9488SPI_BASE::setXY(short x1, short y1, short x2, short y2)
 
 void ILI9488SPI_BASE::setXY(short x, short y)
 {
-	int ex = x | (x << 16);
-	int ey = y | (y << 16);
-	ILI9488SPI_LCD_WRITE_COM(0x2a);
-	SPI.writeUINT(ex); // Need to optimize !
-	ILI9488SPI_LCD_WRITE_COM(0x2b);
-	SPI.writeUINT(ey);
+	static short lastX = 1000, lastY = 1000;
+	if (lastX != x)
+	{
+		int ex = x | (x << 16);
+		ILI9488SPI_LCD_WRITE_COM(0x2a);
+		SPI.writeUINT(ex); // Need to optimize !
+	}
+	if (lastY != y)
+	{
+		int ey = y | (y << 16);
+		ILI9488SPI_LCD_WRITE_COM(0x2b);
+		SPI.writeUINT(ey);
+	}
 	ILI9488SPI_LCD_WRITE_COM(0x2c);
+	lastX = x;
+	lastY = y;
 }
 
 void ILI9488SPI_264KC::init(unsigned char sck, unsigned char miso, unsigned char mosi, unsigned char ss, unsigned int freq)
@@ -565,11 +1000,11 @@ inline void ILI9488SPI_264KC::drawPixel(short x, short y)
 	ILI9488SPI_LCD_WRITE_DATA(_fgColor);
 }
 
-void ILI9488SPI_264KC::fillScr(char r, char g, char b)
+void ILI9488SPI_264KC::fillScr(unsigned char r, unsigned char g,unsigned char b)
 {
 	unsigned int color = ((unsigned int)b << 16) | ((unsigned int)g << 8) | (unsigned int)r;
 
-	setXY(0, 0, maxX, maxY);
+	setXY(0, 0, maxX - 1, maxY - 1);
 	SPI.writeRGB(color, maxX * maxY);
 }
 
@@ -944,7 +1379,7 @@ bool ILI9488SPI_8C::init(unsigned char sck, unsigned char miso, unsigned char mo
 	return true;
 }
 
-void ILI9488SPI_8C::setColor(char r, char g, char b)
+void ILI9488SPI_8C::setColor(unsigned char r, unsigned char g,unsigned char b)
 {
 	fgColorL = ((r == 1) << 2) | ((g == 1) << 1) | (b == 1);
 	fgColorH = fgColorL << 3;
@@ -953,16 +1388,15 @@ void ILI9488SPI_8C::setColor(char r, char g, char b)
 	{
 		fgColorHL = fgColorHL | 0xc0;
 	}
-
 }
 
-void ILI9488SPI_8C::setBackColor(char r, char g, char b)
+void ILI9488SPI_8C::setBackColor(unsigned char r, unsigned char g,unsigned char b)
 {
 	bgColorL = ((r == 1) << 2) | ((g == 1) << 1) | (b == 1);
 	bgColorH = bgColorL << 3;
 }
 
-void ILI9488SPI_8C::fillScr(char r, char g, char b)
+void ILI9488SPI_8C::fillScr(unsigned char r, unsigned char g,unsigned char b)
 {
 	unsigned char tempColorL = ((r == 1) << 2) | ((g == 1) << 1) | (b == 1);
 	unsigned char tempColor = (tempColorL << 3) | tempColorL;
@@ -1184,3 +1618,297 @@ void ILI9488SPI_8C::drawBitmap(short x, short y, const unsigned char * dataArray
 		}
 	}
 }
+
+/************** ST7789 ***************/
+
+void ST77XX::setXY(short x1, short y1, short x2, short y2)
+{
+	x1 += Xoffset;
+	y1 += Yoffset;
+	x2 += Xoffset;
+	y2 += Yoffset;
+
+	int ex = x2 | (x1 << 16);
+	int ey = y2 | (y1 << 16);
+
+	ST77XXSPI_LCD_WRITE_COM(0x2a);
+	SPI.writeUINT(ex);
+	ST77XXSPI_LCD_WRITE_COM(0x2b);
+	SPI.writeUINT(ey);
+	ST77XXSPI_LCD_WRITE_COM(0x2c);
+}
+
+void ST77XX::setXY(short x, short y)
+{
+	static short lastX = 1000, lastY = 1000;
+	x += Xoffset;
+	y += Yoffset;
+	if (lastX != x)
+	{
+		int ex = x | (x << 16);
+		ST77XXSPI_LCD_WRITE_COM(0x2a);
+		SPI.writeUINT(ex); // Need to optimize !
+	}
+	if (lastY != y)
+	{
+		int ey = y | (y << 16);
+		ST77XXSPI_LCD_WRITE_COM(0x2b);
+		SPI.writeUINT(ey);
+	}
+	ST77XXSPI_LCD_WRITE_COM(0x2c);
+	lastX = x;
+	lastY = y;
+}
+
+void ST77XX::init(unsigned int freq)
+{
+	pinMode(ST77XXSPI_DATA_COMMAND_PIN, OUTPUT);
+	pinMode(ST77XXSPI_CS_PIN, OUTPUT);
+	pinMode(ST77XXSPI_RESET_PIN, OUTPUT);
+	if (_res == _135x240 || _res == _240x135)
+	{
+		pinMode(ST77XXSPI_BACK_LIGHT_PIN, OUTPUT);
+	}
+
+	SPI.begin((char)ST77XXSPI_CLK_PIN, (char)-1, (char)ST77XXSPI_MOSI_PIN, (char)ST77XXSPI_CS_PIN);
+	SPI.setBitOrder(MSBFIRST);
+	SPI.setFrequency(freq);
+	SPI.setDataMode(3);
+
+#ifdef ESP32
+	ESP32_SPI_DIS_MOSI_MISO_FULL_DUPLEX(ESP32_VSPI);
+#endif
+
+	ST77XXSPI_SELECT_DATA_COMM(ST77XXSPI_DATA);
+	ST77XXSPI_ASSERT_CS();
+
+	digitalWrite(ST77XXSPI_RESET_PIN, LOW);
+	delay(250);
+	digitalWrite(ST77XXSPI_RESET_PIN, HIGH);
+	delay(250);
+	if (_res == _135x240 || _res == _240x135)
+	{
+		digitalWrite(ST77XXSPI_BACK_LIGHT_PIN, HIGH);
+	}
+	
+	if (_res == _135x240 || _res == _240x135) // ST7789-TTGO
+	{
+		ST77XXSPI_LCD_WRITE_COM(0xE0);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+
+		ST77XXSPI_LCD_WRITE_COM(0x01);	//Power Control 1
+		delay(150);
+
+		ST77XXSPI_LCD_WRITE_COM(0x11);	//Power Control 2
+		delay(255);
+
+		ST77XXSPI_LCD_WRITE_COM(0x3A);	// VCOM Control 1
+		ST77XXSPI_LCD_WRITE_DATA8(0x55);
+		delay(10);
+
+		ST77XXSPI_LCD_WRITE_COM(0x36);	// MADCTL : Memory Data Access Control
+		if (Xoffset == ST7789_X_OFFSET)
+		{
+			ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		}
+		else
+		{
+			ST77XXSPI_LCD_WRITE_DATA8(0xB0);
+		}
+
+		ST77XXSPI_LCD_WRITE_COM(0x2A);	//Memory Access Control
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0xF0);
+
+		ST77XXSPI_LCD_WRITE_COM(0x2B);	//Pixel Format Set
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0xF0);
+
+		ST77XXSPI_LCD_WRITE_COM(0x21);	//Display Inversion OFF
+		delay(10);
+
+		ST77XXSPI_LCD_WRITE_COM(0x13);	//Frame Rate Control
+		delay(10);
+
+		ST77XXSPI_LCD_WRITE_COM(0x29);	//Display ON
+		delay(255);
+	}
+
+	if (_res == _320x240) // ST7735S
+	{
+#if 0
+		ST77XXSPI_LCD_WRITE_COM(ST7735_SWRESET);// 1: Software reset, no args, w/delay
+		delay(250);
+		ST77XXSPI_LCD_WRITE_COM(ST7735_SLPOUT); // 2: Out of sleep mode, no args, w/delay
+		delay(255);
+		ST77XXSPI_LCD_WRITE_COM(ST7735_COLMOD); // 3: Set color mode, 1 arg + delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x05);		// 16-bit color
+		delay(10);								// 10 ms delay
+		ST77XXSPI_LCD_WRITE_COM(ST7735_FRMCTR1);// 4: Frame rate control, 3 args + delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);// fastest refresh
+		ST77XXSPI_LCD_WRITE_DATA8(0x06);// 6 lines front porch
+		ST77XXSPI_LCD_WRITE_DATA8(0x03);// 3 lines back porch
+		delay(10);                     //     10 ms delay
+		ST77XXSPI_LCD_WRITE_COM(ST7735_MADCTL); //  5: Memory access ctrl (directions), 1 arg:
+		ST77XXSPI_LCD_WRITE_DATA8(0b11111100);//                   //     Row addr/col addr, bottom to top refresh
+		ST77XXSPI_LCD_WRITE_COM(ST7735_DISSET5);// 6: Display settings #5, 2 args, no delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x15); // 1 clk cycle nonoverlap, 2 cycle gate, rise, 3 cycle osc equalize
+		ST77XXSPI_LCD_WRITE_DATA8(0x02);    //     Fix on VTL
+		ST77XXSPI_LCD_WRITE_COM(ST7735_INVCTR);//  7: Display inversion control, 1 arg:
+		ST77XXSPI_LCD_WRITE_DATA8(0x6);              //     Line inversion
+		ST77XXSPI_LCD_WRITE_COM(ST7735_INVON);//  7: Display inversion control, 1 arg:
+		ST77XXSPI_LCD_WRITE_COM(ST7735_PWCTR1); //  8: Power control, 2 args + delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x60);                   //     GVDD = 4.7V
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);                   //     1.0uA
+		ST77XXSPI_LCD_WRITE_DATA8(0x84);
+		delay(10);	                     //     10 ms delay
+		ST77XXSPI_LCD_WRITE_COM(ST7735_PWCTR2); //  9: Power control, 1 arg, no delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x05);        //     VGH = 14.7V, VGL = -7.35V
+		ST77XXSPI_LCD_WRITE_COM(ST7735_PWCTR3); // 10: Power control, 2 args, no delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x01);       //     Opamp current small
+		ST77XXSPI_LCD_WRITE_DATA8(0x02);       //     Boost frequency
+		ST77XXSPI_LCD_WRITE_COM(ST7735_VMCTR1);// 11: Power control, 2 args + delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x3C);      //     VCOMH = 4V
+		ST77XXSPI_LCD_WRITE_DATA8(0x38);     //     VCOML = -1.1V
+		delay(10);	                     //     10 ms delay
+		ST77XXSPI_LCD_WRITE_COM(ST7735_PWCTR6); // 12: Power control, 2 args, no delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x11);
+		ST77XXSPI_LCD_WRITE_DATA8(0x15);
+		ST77XXSPI_LCD_WRITE_COM(ST7735_GMCTRP1); // 13: Magical unicorn dust, 16 args, no delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x09);
+		ST77XXSPI_LCD_WRITE_DATA8(0x16);
+		ST77XXSPI_LCD_WRITE_DATA8(0x09);
+		ST77XXSPI_LCD_WRITE_DATA8(0x20); //     (seriously though, not sure what
+		ST77XXSPI_LCD_WRITE_DATA8(0x21);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1B);
+		ST77XXSPI_LCD_WRITE_DATA8(0x13);
+		ST77XXSPI_LCD_WRITE_DATA8(0x19); //      these config values represent)
+		ST77XXSPI_LCD_WRITE_DATA8(0x17);
+		ST77XXSPI_LCD_WRITE_DATA8(0x15);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1E);
+		ST77XXSPI_LCD_WRITE_DATA8(0x2B);
+		ST77XXSPI_LCD_WRITE_DATA8(0x04);
+		ST77XXSPI_LCD_WRITE_DATA8(0x05);
+		ST77XXSPI_LCD_WRITE_DATA8(0x02);
+		ST77XXSPI_LCD_WRITE_DATA8(0x0E);
+		ST77XXSPI_LCD_WRITE_COM(ST7735_GMCTRN1);// 14: Sparkles and rainbows, 16 args + delay:
+		ST77XXSPI_LCD_WRITE_DATA8(0x0B);
+		ST77XXSPI_LCD_WRITE_DATA8(0x14);
+		ST77XXSPI_LCD_WRITE_DATA8(0x08);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1E);//     (ditto)
+		ST77XXSPI_LCD_WRITE_DATA8(0x22);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1D);
+		ST77XXSPI_LCD_WRITE_DATA8(0x18);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1E);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1B);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1A);
+		ST77XXSPI_LCD_WRITE_DATA8(0x24);
+		ST77XXSPI_LCD_WRITE_DATA8(0x2B);
+		ST77XXSPI_LCD_WRITE_DATA8(0x06);
+		ST77XXSPI_LCD_WRITE_DATA8(0x06);
+		ST77XXSPI_LCD_WRITE_DATA8(0x02);
+		ST77XXSPI_LCD_WRITE_DATA8(0x0F);
+		ST77XXSPI_LCD_WRITE_COM(ST7735_NORON);// 17: Normal display on, no args, w/delay
+		delay(10);	                     //     10 ms delay
+		ST77XXSPI_LCD_WRITE_COM(ST7735_DISPON); // 18: Main screen turn on, no args, w/delay
+		delay(255);
+#endif
+		ST77XXSPI_LCD_WRITE_COM(0x11);//sleep out 
+		delay(20);
+		ST77XXSPI_LCD_WRITE_COM(0x28); //display off
+		delay(5);
+		ST77XXSPI_LCD_WRITE_COM(0xCF); //power control b
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x83); //83 81 AA
+		ST77XXSPI_LCD_WRITE_DATA8(0x30);
+		ST77XXSPI_LCD_WRITE_COM(0xED); //power on seq control
+		ST77XXSPI_LCD_WRITE_DATA8(0x64); //64 67
+		ST77XXSPI_LCD_WRITE_DATA8(0x03);
+		ST77XXSPI_LCD_WRITE_DATA8(0x12);
+		ST77XXSPI_LCD_WRITE_DATA8(0x81);
+		ST77XXSPI_LCD_WRITE_COM(0xE8); //timing control a
+		ST77XXSPI_LCD_WRITE_DATA8(0x85);
+		ST77XXSPI_LCD_WRITE_DATA8(0x01);
+		ST77XXSPI_LCD_WRITE_DATA8(0x79); //79 78
+		ST77XXSPI_LCD_WRITE_COM(0xCB); //power control a
+		ST77XXSPI_LCD_WRITE_DATA8(0x39);
+		ST77XXSPI_LCD_WRITE_DATA8(0X2C);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x34);
+		ST77XXSPI_LCD_WRITE_DATA8(0x02);
+		ST77XXSPI_LCD_WRITE_COM(0xF7); //pump ratio control
+		ST77XXSPI_LCD_WRITE_DATA8(0x20);
+		ST77XXSPI_LCD_WRITE_COM(0xEA); //timing control b
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_COM(0xC0); //power control 2
+		ST77XXSPI_LCD_WRITE_DATA8(0x26); //26 25
+		ST77XXSPI_LCD_WRITE_COM(0xC1); //power control 2
+		ST77XXSPI_LCD_WRITE_DATA8(0x11);
+		ST77XXSPI_LCD_WRITE_COM(0xC5); //vcom control 1
+		ST77XXSPI_LCD_WRITE_DATA8(0x35);
+		ST77XXSPI_LCD_WRITE_DATA8(0x3E);
+		ST77XXSPI_LCD_WRITE_COM(0xC7); //vcom control 2
+		ST77XXSPI_LCD_WRITE_DATA8(0xBE); //BE 94
+		ST77XXSPI_LCD_WRITE_COM(0xB1); //frame control
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_DATA8(0x1B); //1B 70
+		ST77XXSPI_LCD_WRITE_COM(0xB6); //display control
+		ST77XXSPI_LCD_WRITE_DATA8(0x0A);
+		ST77XXSPI_LCD_WRITE_DATA8(0x82);
+		ST77XXSPI_LCD_WRITE_DATA8(0x27);
+		ST77XXSPI_LCD_WRITE_DATA8(0x00);
+		ST77XXSPI_LCD_WRITE_COM(0xB7); //emtry mode
+		ST77XXSPI_LCD_WRITE_DATA8(0x07);
+		ST77XXSPI_LCD_WRITE_COM(0x3A); //pixel format
+		ST77XXSPI_LCD_WRITE_DATA8(0x55); //16bit
+		ST77XXSPI_LCD_WRITE_COM(0x36); //  5: Memory access ctrl (directions), 1 arg:
+		ST77XXSPI_LCD_WRITE_DATA8(0b11111100);// Row addr/col addr, bottom to top refresh
+		ST77XXSPI_LCD_WRITE_COM(0x29); //display on
+		delay(5);
+	}
+}
+
+void ST77XX::drawPixel(short x, short y)
+{
+	setXY(x, y);
+	ST77XXSPI_LCD_WRITE_DATA(fg565);
+}
+
+void ST77XX::fillScr(unsigned char r, unsigned char g, unsigned char b)
+{
+	unsigned short color = (((b >> 3) | (g << 5)) << 8) | ((r & 0xF8) | (g >> 5));
+	unsigned int tempC = (color << 16) | color;
+
+	setXY(0, 0, maxX - 1, maxY - 1);
+	//SPI.writeShort(color, maxX * maxY);
+	SPI.writeUINT(tempC, maxX * maxY >> 1);
+}
+
+void ST77XX::drawHLine(short x, short y, int l)
+{
+	if (l < 0)
+	{
+		l = -l;
+		x -= l;
+	}
+	setXY(x, y, x + l, y);
+	SPI.writeShort(fg565, l);
+}
+
+void ST77XX::drawVLine(short x, short y, int l)
+{
+	if (l < 0)
+	{
+		l = -l;
+		y -= l;
+	}
+	setXY(x, y, x, y + l);
+	SPI.writeShort(fg565, l);
+}
+
+
